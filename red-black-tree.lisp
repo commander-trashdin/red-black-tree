@@ -109,11 +109,53 @@
 
 
 (defmethod print-object ((obj rb-node) stream)
-  (with-snames
-    (format stream "Key:~s, Color:~s, Parent:~s~%Left:" obj.key obj.color (when obj.parent obj.parent.key))
-    (print obj.left stream)
-    (format stream "~%Right:")
-    (print obj.right stream)))
+  (labels ((print-spaces (n) (loop :repeat n :do (format stream " ")))
+           (char-from-color (c) (ecase c (:black #\B) (:red #\R)))
+           (spaces-length (depth node-length max-length &aux (node-count (expt 2 (1- depth))))
+             (/ (- max-length (* node-length node-count)) node-count))
+           (tree-depth (node n)
+             (with-slots (left right) node
+               (if node
+                   (max (tree-depth left (1+ n)) (tree-depth right (1+ n)))
+                   n))))
+
+    (let* ((key-length 3)
+           (fmt (format nil "~~~A@a~~c" key-length))
+           (node-length (+ 2 key-length 1)) ; 2 markup + 3 chars key + 1 char color
+           (max-node-count (expt 2 (1- (tree-depth obj 0))))
+           (max-depth-length (+ (* node-length max-node-count) max-node-count))
+           (current-depth 1)
+           (rightp nil)
+           (queue (list obj))
+           (tmp-queue nil)
+           (print-next-p t))
+
+      (loop
+        (if print-next-p
+            (setf print-next-p nil)
+            (return-from print-object))
+
+        (let ((spaces-length (spaces-length current-depth node-length max-depth-length)))
+          (print-spaces (/ spaces-length 2))
+          (dolist (node queue)
+            (let ((markup (if rightp #\/ #\\)))
+              (setf rightp (not rightp))
+
+              (format stream "~c" markup)
+              (if node
+                  (with-slots (key color left right) node
+                    (format stream fmt key (char-from-color color))
+                    (setf tmp-queue (list* right left tmp-queue)
+                          print-next-p (or left right)))
+                  (progn
+                    (print-spaces (- node-length 2))
+                    (setf tmp-queue (list* nil nil tmp-queue))))
+              (format stream "~c" markup)
+              (print-spaces spaces-length))))
+        (terpri)
+
+        (setf queue (nreverse tmp-queue) tmp-queue nil)
+        (incf current-depth)))))
 
 
 (defmethod print-object ((obj red-black-tree) stream)
